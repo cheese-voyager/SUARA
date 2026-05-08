@@ -6,8 +6,8 @@ on:
       - main
 
 env:
-  AWS_REGION: ${{ secrets.AWS_REGION }}
-  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+  AWS_REGION: ap-southeast-2
+  ECR_REGISTRY: 072092344186.dkr.ecr.ap-southeast-2.amazonaws.com
   BACKEND_REPO: suara-backend
   FRONTEND_REPO: suara-frontend
   ECS_CLUSTER: suara-cluster
@@ -38,7 +38,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ap-southeast-2
 
       # ──────────────────────────────────────
       # 3. Login ke Amazon ECR
@@ -48,7 +48,16 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       # ──────────────────────────────────────
-      # 4. Build & Push image BACKEND
+      # 4. Buat ECR Repository jika belum ada
+      # ──────────────────────────────────────
+      - name: Create ECR repositories if not exist
+        run: |
+          aws ecr describe-repositories --repository-names $BACKEND_REPO --region $AWS_REGION 2>/dev/null || \
+            aws ecr create-repository --repository-name $BACKEND_REPO --region $AWS_REGION
+
+          aws ecr describe-repositories --repository-names $FRONTEND_REPO --region $AWS_REGION 2>/dev/null || \
+            aws ecr create-repository --repository-name $FRONTEND_REPO --region $AWS_REGION
+
       # ──────────────────────────────────────
       - name: Build and push BACKEND image to ECR
         id: build-backend
@@ -70,6 +79,8 @@ jobs:
           docker build -t $ECR_REGISTRY/$FRONTEND_REPO:$IMAGE_TAG ./frontend
           docker push $ECR_REGISTRY/$FRONTEND_REPO:$IMAGE_TAG
           echo "frontend_image=$ECR_REGISTRY/$FRONTEND_REPO:$IMAGE_TAG" >> $GITHUB_OUTPUT
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
 
       # ──────────────────────────────────────
       # 6. Update Task Definition BACKEND dengan image baru
