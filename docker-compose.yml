@@ -7,7 +7,7 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - suara-backend
+      - suara_ecsfe
     restart: unless-stopped
 
   suara-backend:
