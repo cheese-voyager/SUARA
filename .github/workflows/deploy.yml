@@ -73,53 +73,61 @@ jobs:
           echo "frontend_image=$ECR_REGISTRY/$FRONTEND_REPO:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
       # ──────────────────────────────────────
-      # 6. Update Task Definition BACKEND dengan image baru
+      # 6. Daftarkan & Deploy BACKEND Task Definition
       # ──────────────────────────────────────
-      - name: Download current BACKEND task definition
+      - name: Register BACKEND task definition and deploy to ECS
         run: |
-          aws ecs describe-task-definition \
-            --task-definition $BACKEND_TASK_FAMILY \
-            --query taskDefinition \
-            > backend-task-def.json
+          IMAGE=$ECR_REGISTRY/$BACKEND_REPO:${{ github.sha }}
 
-      - name: Update BACKEND task definition with new image
-        id: backend-task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: backend-task-def.json
-          container-name: ${{ env.BACKEND_CONTAINER_NAME }}
-          image: ${{ steps.build-backend.outputs.backend_image }}
+          # Inject image baru ke dalam file task definition
+          NEW_TASK_DEF=$(cat .aws/backend-task-def.json | \
+            jq --arg IMAGE "$IMAGE" \
+            '.containerDefinitions[0].image = $IMAGE')
 
-      - name: Deploy BACKEND to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-        with:
-          task-definition: ${{ steps.backend-task-def.outputs.task-definition }}
-          service: ${{ env.BACKEND_SERVICE }}
-          cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
+          # Daftarkan task definition baru ke ECS
+          TASK_ARN=$(echo "$NEW_TASK_DEF" | \
+            aws ecs register-task-definition \
+              --cli-input-json file:///dev/stdin \
+              --query 'taskDefinition.taskDefinitionArn' \
+              --output text)
+
+          echo "Registered task: $TASK_ARN"
+
+          # Deploy ke ECS Service
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service $BACKEND_SERVICE \
+            --task-definition $TASK_ARN \
+            --force-new-deployment
+
+          echo "Backend deployed!"
 
       # ──────────────────────────────────────
-      # 7. Update Task Definition FRONTEND dengan image baru
+      # 7. Daftarkan & Deploy FRONTEND Task Definition
       # ──────────────────────────────────────
-      - name: Download current FRONTEND task definition
+      - name: Register FRONTEND task definition and deploy to ECS
         run: |
-          aws ecs describe-task-definition \
-            --task-definition $FRONTEND_TASK_FAMILY \
-            --query taskDefinition \
-            > frontend-task-def.json
+          IMAGE=$ECR_REGISTRY/$FRONTEND_REPO:${{ github.sha }}
 
-      - name: Update FRONTEND task definition with new image
-        id: frontend-task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: frontend-task-def.json
-          container-name: ${{ env.FRONTEND_CONTAINER_NAME }}
-          image: ${{ steps.build-frontend.outputs.frontend_image }}
+          # Inject image baru ke dalam file task definition
+          NEW_TASK_DEF=$(cat .aws/frontend-task-def.json | \
+            jq --arg IMAGE "$IMAGE" \
+            '.containerDefinitions[0].image = $IMAGE')
 
-      - name: Deploy FRONTEND to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-        with:
-          task-definition: ${{ steps.frontend-task-def.outputs.task-definition }}
-          service: ${{ env.FRONTEND_SERVICE }}
-          cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
+          # Daftarkan task definition baru ke ECS
+          TASK_ARN=$(echo "$NEW_TASK_DEF" | \
+            aws ecs register-task-definition \
+              --cli-input-json file:///dev/stdin \
+              --query 'taskDefinition.taskDefinitionArn' \
+              --output text)
+
+          echo "Registered task: $TASK_ARN"
+
+          # Deploy ke ECS Service
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service $FRONTEND_SERVICE \
+            --task-definition $TASK_ARN \
+            --force-new-deployment
+
+          echo "Frontend deployed!"
