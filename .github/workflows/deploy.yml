@@ -79,17 +79,16 @@ jobs:
         run: |
           IMAGE=$ECR_REGISTRY/$BACKEND_REPO:${{ github.sha }}
 
-          # Inject image baru ke dalam file task definition
-          NEW_TASK_DEF=$(cat .aws/backend-task-def.json | \
+          # Inject image baru lalu simpan ke file sementara
+          cat .aws/backend-task-def.json | \
             jq --arg IMAGE "$IMAGE" \
-            '.containerDefinitions[0].image = $IMAGE')
+            '.containerDefinitions[0].image = $IMAGE' > /tmp/backend-task-def.json
 
           # Daftarkan task definition baru ke ECS
-          TASK_ARN=$(echo "$NEW_TASK_DEF" | \
-            aws ecs register-task-definition \
-              --cli-input-json file:///dev/stdin \
-              --query 'taskDefinition.taskDefinitionArn' \
-              --output text)
+          TASK_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file:///tmp/backend-task-def.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
 
           echo "Registered task: $TASK_ARN"
 
@@ -109,17 +108,16 @@ jobs:
         run: |
           IMAGE=$ECR_REGISTRY/$FRONTEND_REPO:${{ github.sha }}
 
-          # Inject image baru ke dalam file task definition
-          NEW_TASK_DEF=$(cat .aws/frontend-task-def.json | \
+          # Inject image baru lalu simpan ke file sementara
+          cat .aws/frontend-task-def.json | \
             jq --arg IMAGE "$IMAGE" \
-            '.containerDefinitions[0].image = $IMAGE')
+            '.containerDefinitions[0].image = $IMAGE' > /tmp/frontend-task-def.json
 
           # Daftarkan task definition baru ke ECS
-          TASK_ARN=$(echo "$NEW_TASK_DEF" | \
-            aws ecs register-task-definition \
-              --cli-input-json file:///dev/stdin \
-              --query 'taskDefinition.taskDefinitionArn' \
-              --output text)
+          TASK_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file:///tmp/frontend-task-def.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
 
           echo "Registered task: $TASK_ARN"
 
