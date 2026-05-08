@@ -8,15 +8,15 @@ on:
 env:
   AWS_REGION: ap-southeast-2
   ECR_REGISTRY: 072092344186.dkr.ecr.ap-southeast-2.amazonaws.com
-  BACKEND_REPO: suara-backend
-  FRONTEND_REPO: suara-frontend
-  ECS_CLUSTER: suara-cluster
-  BACKEND_SERVICE: suara-backend-service
-  FRONTEND_SERVICE: suara-frontend-service
-  BACKEND_TASK_FAMILY: suara-backend-task
-  FRONTEND_TASK_FAMILY: suara-frontend-task
-  BACKEND_CONTAINER_NAME: suara-backend
-  FRONTEND_CONTAINER_NAME: suara-frontend
+  BACKEND_REPO: suara_ecsbe
+  FRONTEND_REPO: suara_ecsfe
+  ECS_CLUSTER: suara_ecs
+  BACKEND_SERVICE: suara_ecsbe
+  FRONTEND_SERVICE: suara_ecsfe
+  BACKEND_TASK_FAMILY: suara_ecsbe
+  FRONTEND_TASK_FAMILY: suara_ecsfe
+  BACKEND_CONTAINER_NAME: suara_ecsbe
+  FRONTEND_CONTAINER_NAME: suara_ecsfe
 
 jobs:
   deploy:
@@ -48,16 +48,7 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       # ──────────────────────────────────────
-      # 4. Buat ECR Repository jika belum ada
-      # ──────────────────────────────────────
-      - name: Create ECR repositories if not exist
-        run: |
-          aws ecr describe-repositories --repository-names $BACKEND_REPO --region $AWS_REGION 2>/dev/null || \
-            aws ecr create-repository --repository-name $BACKEND_REPO --region $AWS_REGION
-
-          aws ecr describe-repositories --repository-names $FRONTEND_REPO --region $AWS_REGION 2>/dev/null || \
-            aws ecr create-repository --repository-name $FRONTEND_REPO --region $AWS_REGION
-
+      # 4. Build & Push image BACKEND
       # ──────────────────────────────────────
       - name: Build and push BACKEND image to ECR
         id: build-backend
