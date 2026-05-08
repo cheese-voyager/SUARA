@@ -1,0 +1,124 @@
+name: Deploy SUARA to AWS ECS
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+  BACKEND_REPO: suara-backend
+  FRONTEND_REPO: suara-frontend
+  ECS_CLUSTER: suara-cluster
+  BACKEND_SERVICE: suara-backend-service
+  FRONTEND_SERVICE: suara-frontend-service
+  BACKEND_TASK_FAMILY: suara-backend-task
+  FRONTEND_TASK_FAMILY: suara-frontend-task
+  BACKEND_CONTAINER_NAME: suara-backend
+  FRONTEND_CONTAINER_NAME: suara-frontend
+
+jobs:
+  deploy:
+    name: Build, Push & Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # ──────────────────────────────────────
+      # 1. Ambil kode terbaru dari GitHub
+      # ──────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ──────────────────────────────────────
+      # 2. Konfigurasi kredensial AWS
+      # ──────────────────────────────────────
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # ──────────────────────────────────────
+      # 3. Login ke Amazon ECR
+      # ──────────────────────────────────────
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ──────────────────────────────────────
+      # 4. Build & Push image BACKEND
+      # ──────────────────────────────────────
+      - name: Build and push BACKEND image to ECR
+        id: build-backend
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$BACKEND_REPO:$IMAGE_TAG ./backend
+          docker push $ECR_REGISTRY/$BACKEND_REPO:$IMAGE_TAG
+          echo "backend_image=$ECR_REGISTRY/$BACKEND_REPO:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      # ──────────────────────────────────────
+      # 5. Build & Push image FRONTEND
+      # ──────────────────────────────────────
+      - name: Build and push FRONTEND image to ECR
+        id: build-frontend
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$FRONTEND_REPO:$IMAGE_TAG ./frontend
+          docker push $ECR_REGISTRY/$FRONTEND_REPO:$IMAGE_TAG
+          echo "frontend_image=$ECR_REGISTRY/$FRONTEND_REPO:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      # ──────────────────────────────────────
+      # 6. Update Task Definition BACKEND dengan image baru
+      # ──────────────────────────────────────
+      - name: Download current BACKEND task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition $BACKEND_TASK_FAMILY \
+            --query taskDefinition \
+            > backend-task-def.json
+
+      - name: Update BACKEND task definition with new image
+        id: backend-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: backend-task-def.json
+          container-name: ${{ env.BACKEND_CONTAINER_NAME }}
+          image: ${{ steps.build-backend.outputs.backend_image }}
+
+      - name: Deploy BACKEND to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.backend-task-def.outputs.task-definition }}
+          service: ${{ env.BACKEND_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      # ──────────────────────────────────────
+      # 7. Update Task Definition FRONTEND dengan image baru
+      # ──────────────────────────────────────
+      - name: Download current FRONTEND task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition $FRONTEND_TASK_FAMILY \
+            --query taskDefinition \
+            > frontend-task-def.json
+
+      - name: Update FRONTEND task definition with new image
+        id: frontend-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: frontend-task-def.json
+          container-name: ${{ env.FRONTEND_CONTAINER_NAME }}
+          image: ${{ steps.build-frontend.outputs.frontend_image }}
+
+      - name: Deploy FRONTEND to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.frontend-task-def.outputs.task-definition }}
+          service: ${{ env.FRONTEND_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
